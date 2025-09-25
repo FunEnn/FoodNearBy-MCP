@@ -40,7 +40,7 @@ class FoodNearbyMCPServer {
     this.server = new Server(
       {
         name: "foodnearby-mcp",
-        version: '0.0.3',
+        version: '0.0.4',
       },
       {
         capabilities: {
@@ -62,27 +62,27 @@ class FoodNearbyMCPServer {
         tools: [
           {
             name: 'search_map_poi',
-            description: '通过地图API搜索附近的餐饮商家POI信息，专注于美食餐厅',
+            description: '通过地图API搜索附近的餐饮商家POI信息，专注于美食餐厅。支持百度地图和高德地图，提供详细的餐厅信息包括评分、价格、菜系等。',
             inputSchema: {
               type: 'object',
               properties: {
                 location: {
                   type: 'string',
-                  description: '搜索位置，可以是地址、坐标、"当前位置"或区域名称（如：北京市）',
+                  description: '搜索位置，可以是地址、坐标、"当前位置"或区域名称（如：北京市、天安门广场、39.9042,116.4074）',
                 },
                 radius: {
                   type: 'number',
-                  description: '搜索半径（米），默认1000米',
+                  description: '搜索半径（米），默认1000米，建议范围：500-5000米',
                   default: DEFAULT_RADIUS,
                 },
                 keyword: {
                   type: 'string',
-                  description: '餐饮搜索关键词，如：美食、餐厅、火锅、川菜、日料、西餐等',
+                  description: '餐饮搜索关键词，如：美食、餐厅、火锅、川菜、日料、西餐、烧烤、甜品等',
                   default: DEFAULT_KEYWORD,
                 },
                 cuisine_type: {
                   type: 'string',
-                  description: '菜系类型筛选（如：川菜、粤菜、湘菜、日料、韩料、西餐、火锅等）',
+                  description: '菜系类型筛选（如：川菜、粤菜、湘菜、日料、韩料、西餐、火锅、烧烤、甜品等）',
                 },
                 price_range: {
                   type: 'string',
@@ -91,16 +91,16 @@ class FoodNearbyMCPServer {
                 map_platforms: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: '地图平台：baidu、amap、all',
+                  description: '地图平台选择：baidu（百度地图）、amap（高德地图）、all（全部平台）',
                   default: DEFAULT_PLATFORMS,
                 },
                 poi_type: {
                   type: 'string',
-                  description: '高德地图餐饮POI类型（如：050000=餐饮服务，050100=中餐厅，050101=火锅）',
+                  description: '高德地图餐饮POI类型（如：050000=餐饮服务，050100=中餐厅，050101=火锅，050102=烧烤）',
                 },
                 city_limit: {
                   type: 'boolean',
-                  description: '是否仅返回指定城市数据（仅高德地图有效）',
+                  description: '是否仅返回指定城市数据（仅高德地图有效），默认false',
                   default: false,
                 },
               },
@@ -168,7 +168,7 @@ class FoodNearbyMCPServer {
           content: [
             {
               type: 'text',
-              text: `🗺️ 未找到 ${location} 附近的美食商家。\n\n可能的原因：\n1. 该区域美食商家较少\n2. 搜索关键词不准确\n3. 搜索半径过小\n4. 地图API密钥配置问题\n\n建议：\n- 尝试扩大搜索半径\n- 使用更通用的关键词（如"餐厅"）\n- 检查地图API配置`,
+              text: `未找到 ${location} 附近的美食商家`,
             },
           ],
         };
@@ -189,22 +189,34 @@ class FoodNearbyMCPServer {
         .map((restaurant, index) => this.formatRestaurantInfo(restaurant, index + 1))
         .join('\n\n');
 
+      const totalResults = results.length;
+      const filteredCount = filteredResults.length;
+      const filterApplied = cuisine_type || price_range;
+
       return {
         content: [
           {
             type: 'text',
-            text: `🗺️ 地图POI搜索结果（${filteredResults.length}家美食商家）：\n\n${resultText}\n\n${this.formatSearchStats(location, radius, keyword, platforms, { 
+            text: `美食搜索成功！找到 ${filteredCount} 家${filterApplied ? '符合条件' : ''}的美食商家
+
+${resultText}
+
+---
+
+${this.formatSearchStats(location, radius, keyword, platforms, { 
               cuisine_type: cuisine_type || undefined, 
               price_range: price_range || undefined, 
               poi_type: poi_type || undefined, 
               city_limit: city_limit || undefined 
-            })}\n\n💡 提示：\n- 数据来源于地图POI，包含真实的餐饮商家信息\n- 评分和评论数量来自地图平台\n- 价格区间基于地图数据估算\n- 高德地图支持餐饮POI类型精确搜索\n- 支持中餐、西餐、日料、韩料、火锅、烧烤等餐饮类型`,
+            })}
+
+${filterApplied ? `\n筛选结果：从 ${totalResults} 个结果中筛选出 ${filteredCount} 个符合条件的结果` : ''}`,
           },
         ],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`地图POI搜索失败: ${errorMessage}`);
+      throw new Error(`地图POI搜索失败: ${errorMessage}\n\n请检查：\n• 地图API密钥是否正确配置\n• 网络连接是否正常\n• 搜索参数是否合理`);
     }
   }
 
@@ -215,16 +227,22 @@ class FoodNearbyMCPServer {
    * @returns 格式化后的字符串
    */
   private formatRestaurantInfo(restaurant: any, index: number): string {
-    return `${index}. ${restaurant.name}
-   📍 ${restaurant.address}
-   ⭐ ${restaurant.rating}/5.0 (${restaurant.review_count}条评价)
-   📞 ${restaurant.phone || '电话未知'}
-   🕒 ${restaurant.opening_hours || '营业时间未知'}
-   💰 ${restaurant.price_range}
-   🍽️ ${restaurant.cuisine_type}
-   📏 距离：${Math.round(restaurant.distance)}米
-   🗺️ 来源：${restaurant.platforms.join(', ')}`;
+    const distanceText = restaurant.distance ? `${Math.round(restaurant.distance)}米` : '距离未知';
+    const phoneText = restaurant.phone || '电话未知';
+    const hoursText = restaurant.opening_hours || '营业时间未知';
+    const reviewText = restaurant.review_count > 0 ? `${restaurant.review_count}条评价` : '暂无评价';
+
+    return `**${index}. ${restaurant.name}**
+地址：${restaurant.address}
+评分：${restaurant.rating}/5.0 (${reviewText})
+电话：${phoneText}
+营业时间：${hoursText}
+价格：${restaurant.price_range}
+菜系：${restaurant.cuisine_type}
+距离：${distanceText}
+来源：${restaurant.platforms.join(', ')}`;
   }
+
 
   /**
    * 格式化搜索统计信息
@@ -247,14 +265,22 @@ class FoodNearbyMCPServer {
       filters.price_range && `价格=${filters.price_range}`,
       filters.poi_type && `POI类型=${filters.poi_type}`,
       filters.city_limit && `城市限制=${filters.city_limit}`
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean).join(' | ');
 
-    return `📊 搜索统计：
-- 搜索位置：${location}
-- 搜索半径：${radius}米
-- 搜索关键词：${keyword}
-- 使用平台：${platforms.join(', ')}
-- 筛选条件：${filterText}`;
+    const platformNames = platforms.map(p => {
+      switch (p) {
+        case 'baidu': return '百度地图';
+        case 'amap': return '高德地图';
+        default: return p;
+      }
+    }).join(' + ');
+
+    return `**搜索统计**
+搜索位置：${location}
+搜索半径：${radius}米
+搜索关键词：${keyword}
+使用平台：${platformNames}
+${filterText ? `筛选条件：${filterText}` : ''}`;
   }
 
   public async run(): Promise<void> {

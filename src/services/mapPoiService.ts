@@ -1,5 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import { Coordinates, LocationService } from './locationService.js';
+import { BaiduLocationService } from './baiduLocationService.js';
+import { AmapLocationService } from './amapLocationService.js';
 
 export interface Restaurant {
   id: string;
@@ -113,6 +115,8 @@ export class MapPoiService {
   private readonly baiduApiKey: string | undefined;
   private readonly amapApiKey: string | undefined;
   private readonly locationService: LocationService;
+  private readonly baiduLocationService: BaiduLocationService;
+  private readonly amapLocationService: AmapLocationService;
 
   // 常量定义
   private static readonly DEFAULT_RADIUS = 1000;
@@ -142,6 +146,8 @@ export class MapPoiService {
     this.baiduApiKey = process.env.BAIDU_MAP_API_KEY;
     this.amapApiKey = process.env.AMAP_API_KEY;
     this.locationService = new LocationService();
+    this.baiduLocationService = new BaiduLocationService();
+    this.amapLocationService = new AmapLocationService();
   }
 
   /**
@@ -297,12 +303,12 @@ export class MapPoiService {
         lat: poi.location.lat,
         lng: poi.location.lng,
       },
-      rating: this.locationService.parseRating(poi.detail_info?.overall_rating),
+      rating: this.baiduLocationService.parseRating(poi.detail_info?.overall_rating),
       review_count: this.parseBaiduReviewCount(poi.detail_info?.comment_num),
       phone: poi.detail_info?.phone || '',
       opening_hours: poi.detail_info?.opening_time || '',
-      price_range: this.locationService.parsePriceRange(poi.detail_info?.price),
-      cuisine_type: this.locationService.extractCuisineType(poi.name + ' ' + (poi.detail_info?.tag || '')),
+      price_range: this.baiduLocationService.parsePriceRange(poi.detail_info?.price),
+      cuisine_type: this.baiduLocationService.extractCuisineType(poi.name + ' ' + (poi.detail_info?.tag || '')),
       distance: poi.distance,
       image: poi.detail_info?.photo?.photo[0]?.photo_url || '',
       platforms: ['baidu_map'],
@@ -325,12 +331,12 @@ export class MapPoiService {
         lat: parseFloat(poi.location?.split(',')[1] || '0'),
         lng: parseFloat(poi.location?.split(',')[0] || '0'),
       },
-      rating: this.locationService.parseRating(poi.biz_ext?.rating),
+      rating: this.amapLocationService.parseRating(poi.biz_ext?.rating),
       review_count: 0, // 高德地图API不直接返回评论数
       phone: poi.tel || '',
       opening_hours: '', // 高德地图API不直接返回营业时间
-      price_range: this.locationService.parsePriceRange(poi.biz_ext?.cost),
-      cuisine_type: this.locationService.extractCuisineType(poi.name + ' ' + (poi.type || '') + ' ' + (poi.tag || '')),
+      price_range: this.amapLocationService.parsePriceRange(poi.biz_ext?.cost),
+      cuisine_type: this.amapLocationService.extractCuisineType(poi.name + ' ' + (poi.type || '') + ' ' + (poi.tag || '')),
       distance: poi.distance || 0,
       image: poi.photos?.[0]?.url || '',
       platforms: ['amap'],
@@ -498,7 +504,7 @@ export class MapPoiService {
     cuisineType?: string
   ): Promise<Restaurant[]> {
     try {
-      const regionResults = await this.locationService.searchFoodInRegion(region, keyword, cuisineType);
+      const regionResults = await this.baiduLocationService.searchFoodInRegion(region, keyword, cuisineType);
       
       return regionResults.map((poi, index) => ({
         id: `region_${index}`,
@@ -546,7 +552,7 @@ export class MapPoiService {
   ): Promise<Restaurant[]> {
     try {
       // 判断是否为区域搜索
-      const isRegionSearch = LocationService.isRegionSearch(location);
+      const isRegionSearch = BaiduLocationService.isRegionSearch(location);
 
       if (isRegionSearch) {
         // 使用区域搜索
