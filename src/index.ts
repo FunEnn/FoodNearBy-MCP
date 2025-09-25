@@ -39,8 +39,8 @@ class FoodNearbyMCPServer {
   constructor() {
     this.server = new Server(
       {
-        name: '@funenn/mcp-server',
-        version: '1.0.0',
+        name: "foodnearby-mcp",
+        version: '0.0.3',
       },
       {
         capabilities: {
@@ -260,7 +260,7 @@ class FoodNearbyMCPServer {
   public async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('@funenn/mcp-server 已启动');
+    console.error('foodnearby-mcp 已启动');
   }
 }
 

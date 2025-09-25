@@ -72,6 +72,7 @@ cp .env
 
 编辑 `.env` 文件，填入你的API密钥：
 ```env
+
 # 百度地图API（用于地理编码和位置服务）
 BAIDU_MAP_API_KEY=your_baidu_map_api_key
 
