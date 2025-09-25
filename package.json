@@ -1,8 +1,11 @@
 {
   "name": "foodnearby-mcp",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "MCP服务：查找当前位置附近的美食，使用百度地图和高德地图API进行位置服务",
   "main": "dist/index.js",
+  "bin": {
+    "foodnearby-mcp": "dist/index.js"
+  },
   "type": "module",
   "repository": {
     "type": "git",
@@ -25,13 +28,13 @@
   "author": "FunEnn",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.5.0",
-    "axios": "^1.6.0",
-    "dotenv": "^16.3.1"
+    "@modelcontextprotocol/sdk": "^1.18.1",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.2"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "nodemon": "^3.0.0"
+    "@types/node": "^24.5.2",
+    "nodemon": "^3.1.10",
+    "typescript": "^5.9.2"
   }
 }
