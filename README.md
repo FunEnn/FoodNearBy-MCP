@@ -46,7 +46,7 @@ npm install -g foodnearby-mcp
       ],
       "env": {
         "BAIDU_MAP_API_KEY": "your_baidu_map_api_key",
-        "GAODE_MAP_API_KEY": "your_gaode_map_api_key"
+        "AMAP_API_KEY": "your_amap_api_key"
       }
     }
   }
@@ -76,11 +76,11 @@ cp .env
 BAIDU_MAP_API_KEY=your_baidu_map_api_key
 
 # 高德地图API（备用位置服务）
-GAODE_MAP_API_KEY=your_gaode_map_api_key
+AMAP_API_KEY=your_amap_api_key
 
 ```
 
-4. **编译TypeScript**
+4. **构建**
 ```bash
 npm run build
 ```
@@ -88,16 +88,6 @@ npm run build
 5. **启动服务**
 ```bash
 npm start
-```
-
-或开发模式：
-```bash
-npm run dev
-```
-
-或编译并运行：
-```bash
-npm run dev:run
 ```
 
 ## 🛠️ MCP工具使用

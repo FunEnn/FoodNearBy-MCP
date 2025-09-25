@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import { Coordinates } from './locationService.js';
+import { Coordinates, LocationService } from './locationService.js';
 
 export interface Restaurant {
   id: string;
@@ -50,19 +50,60 @@ interface BaiduPoiResponse {
 interface AmapPoiResponse {
   status: string;
   info: string;
+  count?: string;
+  suggestion?: {
+    keywords: string[];
+    cities: Array<{
+      name: string;
+      num: string;
+      citycode: string;
+      adcode: string;
+    }>;
+  };
   pois?: Array<{
     id: string;
+    parent?: string;
     name: string;
+    type: string;
+    typecode: string;
+    biz_type?: string;
     address: string;
     location: string;
-    distance: number;
-    rating?: string;
-    comment_num?: string;
+    distance?: number;
     tel?: string;
-    opening_time?: string;
-    cost?: string;
-    type?: string;
+    postcode?: string;
+    website?: string;
+    email?: string;
+    pcode?: string;
+    pname?: string;
+    citycode?: string;
+    cityname?: string;
+    adcode?: string;
+    adname?: string;
+    entr_location?: string;
+    navi_poiid?: string;
+    gridcode?: string;
+    alias?: string;
+    parking_type?: string;
+    tag?: string;
+    indoor_map?: string;
+    indoor_data?: any;
+    cpid?: string;
+    floor?: string;
+    truefloor?: string;
+    groupbuy_num?: string;
+    business_area?: string;
+    discount_num?: string;
+    biz_ext?: {
+      rating?: string;
+      cost?: string;
+      meal_ordering?: string;
+      seat_ordering?: string;
+      ticket_ordering?: string;
+      hotel_ordering?: string;
+    };
     photos?: Array<{
+      title: string;
       url: string;
     }>;
   }>;
@@ -70,11 +111,37 @@ interface AmapPoiResponse {
 
 export class MapPoiService {
   private readonly baiduApiKey: string | undefined;
-  private readonly gaodeApiKey: string | undefined;
+  private readonly amapApiKey: string | undefined;
+  private readonly locationService: LocationService;
+
+  // 常量定义
+  private static readonly DEFAULT_RADIUS = 1000;
+  private static readonly DEFAULT_KEYWORD = '美食';
+  private static readonly DEFAULT_PLATFORMS = ['baidu', 'amap'];
+  private static readonly MAX_OFFSET = 25;
+
+  // 高德地图餐饮POI类型常量
+  public static readonly AMAP_FOOD_TYPES = {
+    RESTAURANT: '050000',           // 餐饮服务
+    CHINESE_RESTAURANT: '050100',   // 中餐厅
+    WESTERN_RESTAURANT: '050200',   // 西餐厅
+    JAPANESE_RESTAURANT: '050300',  // 日本料理
+    KOREAN_RESTAURANT: '050400',    // 韩国料理
+    FAST_FOOD: '050500',            // 快餐
+    COFFEE_SHOP: '050600',          // 咖啡厅
+    TEA_HOUSE: '050700',            // 茶艺馆
+    BAR: '050800',                  // 酒吧
+    CAKE_SHOP: '050900',            // 蛋糕店
+    HOT_POT: '050101',              // 火锅
+    BARBECUE: '050102',             // 烧烤
+    DESSERT: '050103',              // 甜品
+    SNACKS: '050104',               // 小吃
+  };
 
   constructor() {
     this.baiduApiKey = process.env.BAIDU_MAP_API_KEY;
-    this.gaodeApiKey = process.env.GAODE_MAP_API_KEY;
+    this.amapApiKey = process.env.AMAP_API_KEY;
+    this.locationService = new LocationService();
   }
 
   /**
@@ -86,8 +153,8 @@ export class MapPoiService {
    */
   public async searchNearbyFoodWithBaidu(
     coordinates: Coordinates, 
-    radius: number = 1000, 
-    keyword: string = '美食'
+    radius: number = MapPoiService.DEFAULT_RADIUS, 
+    keyword: string = MapPoiService.DEFAULT_KEYWORD
   ): Promise<Restaurant[]> {
     try {
       const url = 'https://api.map.baidu.com/place/v2/search';
@@ -117,7 +184,7 @@ export class MapPoiService {
   }
 
   /**
-   * 通过高德地图API搜索附近的美食商家
+   * 通过高德地图API搜索附近的美食商家（周边搜索）
    * @param coordinates - 坐标
    * @param radius - 搜索半径（米）
    * @param keyword - 搜索关键词
@@ -125,13 +192,13 @@ export class MapPoiService {
    */
   public async searchNearbyFoodWithAmap(
     coordinates: Coordinates, 
-    radius: number = 1000, 
-    keyword: string = '美食'
+    radius: number = MapPoiService.DEFAULT_RADIUS, 
+    keyword: string = MapPoiService.DEFAULT_KEYWORD
   ): Promise<Restaurant[]> {
     try {
       const url = 'https://restapi.amap.com/v3/place/around';
     const params = {
-      key: this.gaodeApiKey,
+      key: this.amapApiKey,
       location: `${coordinates.lng},${coordinates.lat}`, // 高德地图使用经度,纬度格式
       keywords: keyword,
       radius: radius,
@@ -156,6 +223,67 @@ export class MapPoiService {
   }
 
   /**
+   * 通过高德地图API进行文本搜索美食商家
+   * @param city - 城市名称（可选）
+   * @param keyword - 搜索关键词（可选）
+   * @param types - POI类型（可选）
+   * @param citylimit - 是否仅返回指定城市数据
+   * @param children - 是否按照层级展示子POI数据
+   * @param offset - 每页记录数据
+   * @param page - 当前页数
+   * @returns Promise<Restaurant[]>
+   */
+  public async searchFoodWithAmapText(
+    city?: string,
+    keyword?: string,
+    types?: string,
+    citylimit: boolean = false,
+    children: number = 0,
+    offset: number = 20,
+    page: number = 1
+  ): Promise<Restaurant[]> {
+    try {
+      const url = 'https://restapi.amap.com/v3/place/text';
+      const params: Record<string, any> = {
+        key: this.amapApiKey,
+        output: 'json',
+        extensions: 'all', // 返回详细信息
+        offset: Math.min(offset, MapPoiService.MAX_OFFSET), // 强烈建议不超过25
+        page: page,
+        children: children,
+        citylimit: citylimit,
+      };
+
+      // keywords 和 types 二选一必填
+      if (keyword) {
+        params.keywords = keyword;
+      } else if (types) {
+        params.types = types;
+      } else {
+        // 默认使用美食关键词
+        params.keywords = MapPoiService.DEFAULT_KEYWORD;
+      }
+
+      // 如果指定了城市
+      if (city) {
+        params.city = city;
+      }
+
+      const response: AxiosResponse<AmapPoiResponse> = await axios.get(url, { params });
+      
+      if (response.data.status === '1' && response.data.pois) {
+        return response.data.pois.map(poi => this.formatAmapPoi(poi));
+      } else {
+        throw new Error(`高德地图文本搜索API错误: ${response.data.info}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('高德地图文本搜索失败:', errorMessage);
+      return [];
+    }
+  }
+
+  /**
    * 格式化百度地图POI数据
    * @param poi - 百度地图POI数据
    * @returns Restaurant
@@ -169,12 +297,12 @@ export class MapPoiService {
         lat: poi.location.lat,
         lng: poi.location.lng,
       },
-      rating: this.parseBaiduRating(poi.detail_info?.overall_rating),
+      rating: this.locationService.parseRating(poi.detail_info?.overall_rating),
       review_count: this.parseBaiduReviewCount(poi.detail_info?.comment_num),
       phone: poi.detail_info?.phone || '',
       opening_hours: poi.detail_info?.opening_time || '',
-      price_range: this.parseBaiduPriceRange(poi.detail_info?.price),
-      cuisine_type: this.extractCuisineType(poi.name + ' ' + (poi.detail_info?.tag || '')),
+      price_range: this.locationService.parsePriceRange(poi.detail_info?.price),
+      cuisine_type: this.locationService.extractCuisineType(poi.name + ' ' + (poi.detail_info?.tag || '')),
       distance: poi.distance,
       image: poi.detail_info?.photo?.photo[0]?.photo_url || '',
       platforms: ['baidu_map'],
@@ -197,40 +325,18 @@ export class MapPoiService {
         lat: parseFloat(poi.location?.split(',')[1] || '0'),
         lng: parseFloat(poi.location?.split(',')[0] || '0'),
       },
-      rating: this.parseAmapRating(poi.rating),
-      review_count: this.parseAmapReviewCount(poi.comment_num),
+      rating: this.locationService.parseRating(poi.biz_ext?.rating),
+      review_count: 0, // 高德地图API不直接返回评论数
       phone: poi.tel || '',
-      opening_hours: poi.opening_time || '',
-      price_range: this.parseAmapPriceRange(poi.cost),
-      cuisine_type: this.extractCuisineType(poi.name + ' ' + (poi.type || '')),
-      distance: poi.distance,
+      opening_hours: '', // 高德地图API不直接返回营业时间
+      price_range: this.locationService.parsePriceRange(poi.biz_ext?.cost),
+      cuisine_type: this.locationService.extractCuisineType(poi.name + ' ' + (poi.type || '') + ' ' + (poi.tag || '')),
+      distance: poi.distance || 0,
       image: poi.photos?.[0]?.url || '',
       platforms: ['amap'],
       source: 'amap',
-      tags: poi.type?.split(';') || [],
+      tags: this.parseAmapTags(poi.type, poi.tag),
     };
-  }
-
-  /**
-   * 解析百度地图评分
-   * @param rating 
-   * @returns number
-   */
-  private parseBaiduRating(rating: string | number | undefined): number {
-    if (!rating) return 0;
-    const num = parseFloat(String(rating));
-    return isNaN(num) ? 0 : Math.min(5, Math.max(0, num));
-  }
-
-  /**
-   * 解析高德地图评分
-   * @param rating 
-   * @returns number
-   */
-  private parseAmapRating(rating: string | undefined): number {
-    if (!rating) return 0;
-    const num = parseFloat(rating);
-    return isNaN(num) ? 0 : Math.min(5, Math.max(0, num));
   }
 
   /**
@@ -244,66 +350,30 @@ export class MapPoiService {
     return isNaN(num) ? 0 : num;
   }
 
-  /**
-   * 解析高德地图评论数量
-   * @param count 
-   * @returns number
-   */
-  private parseAmapReviewCount(count: string | undefined): number {
-    if (!count) return 0;
-    const num = parseInt(count);
-    return isNaN(num) ? 0 : num;
-  }
 
   /**
-   * 解析百度地图价格区间
-   * @param price 
-   * @returns string
+   * 解析高德地图标签
+   * @param type - POI类型
+   * @param tag - 特色标签
+   * @returns string[]
    */
-  private parseBaiduPriceRange(price: string | undefined): string {
-    if (!price) return '中等';
-    const num = parseFloat(price);
-    if (isNaN(num)) return '中等';
-    if (num < 30) return '便宜';
-    if (num > 100) return '昂贵';
-    return '中等';
-  }
-
-  /**
-   * 解析高德地图价格区间
-   * @param cost 
-   * @returns string
-   */
-  private parseAmapPriceRange(cost: string | undefined): string {
-    if (!cost) return '中等';
-    const num = parseFloat(cost);
-    if (isNaN(num)) return '中等';
-    if (num < 30) return '便宜';
-    if (num > 100) return '昂贵';
-    return '中等';
-  }
-
-  /**
-   * 提取菜系类型
-   * @param text 
-   * @returns string
-   */
-  private extractCuisineType(text: string): string {
-    const cuisineTypes = [
-      '川菜', '粤菜', '湘菜', '鲁菜', '苏菜', '浙菜', '闽菜', '徽菜',
-      '日料', '韩料', '西餐', '快餐', '火锅', '烧烤', '甜品', '咖啡',
-      '茶饮', '面包', '蛋糕', '小吃', '面食', '米饭', '汤品'
-    ];
+  private parseAmapTags(type?: string, tag?: string): string[] {
+    const tags: string[] = [];
     
-    for (const type of cuisineTypes) {
-      if (text.includes(type)) {
-        return type;
-      }
+    if (type) {
+      // 解析POI类型，格式：大类;中类;小类
+      const typeParts = type.split(';').map(part => part.trim()).filter(part => part);
+      tags.push(...typeParts);
     }
     
-    return '其他';
+    if (tag) {
+      // 解析特色标签，格式：标签1,标签2,标签3
+      const tagParts = tag.split(',').map(part => part.trim()).filter(part => part);
+      tags.push(...tagParts);
+    }
+    
+    return tags;
   }
-
 
   /**
    * 搜索附近美食（综合多个地图API）
@@ -315,9 +385,9 @@ export class MapPoiService {
    */
   public async searchNearbyFood(
     coordinates: Coordinates, 
-    radius: number = 1000, 
-    keyword: string = '美食', 
-    platforms: string[] = ['baidu', 'amap']
+    radius: number = MapPoiService.DEFAULT_RADIUS, 
+    keyword: string = MapPoiService.DEFAULT_KEYWORD, 
+    platforms: string[] = MapPoiService.DEFAULT_PLATFORMS
   ): Promise<Restaurant[]> {
     const results: Restaurant[] = [];
 
@@ -329,7 +399,7 @@ export class MapPoiService {
       }
 
       // 使用高德地图API
-      if (platforms.includes('amap') && this.gaodeApiKey) {
+      if (platforms.includes('amap') && this.amapApiKey) {
         const amapResults = await this.searchNearbyFoodWithAmap(coordinates, radius, keyword);
         results.push(...amapResults);
       }
@@ -413,6 +483,103 @@ export class MapPoiService {
   public filterByDistance(restaurants: Restaurant[], maxDistance: number): Restaurant[] {
     if (!maxDistance) return restaurants;
     return restaurants.filter(restaurant => (restaurant.distance || 0) <= maxDistance);
+  }
+
+  /**
+   * 搜索指定区域的美食（使用百度地图区域搜索API）
+   * @param region - 搜索区域（如：北京市）
+   * @param keyword - 搜索关键词（如：美食、餐厅）
+   * @param cuisineType - 菜系类型（可选）
+   * @returns Promise<Restaurant[]>
+   */
+  public async searchFoodInRegion(
+    region: string,
+    keyword: string = MapPoiService.DEFAULT_KEYWORD,
+    cuisineType?: string
+  ): Promise<Restaurant[]> {
+    try {
+      const regionResults = await this.locationService.searchFoodInRegion(region, keyword, cuisineType);
+      
+      return regionResults.map((poi, index) => ({
+        id: `region_${index}`,
+        name: poi.name,
+        address: poi.address,
+        location: poi.location,
+        rating: poi.rating,
+        review_count: 0, // 区域搜索API可能不返回评论数
+        phone: poi.phone || '',
+        opening_hours: poi.opening_hours || '',
+        price_range: poi.price_range || '中等',
+        cuisine_type: poi.cuisine_type || '其他',
+        distance: 0, // 区域搜索不提供距离信息
+        image: '',
+        platforms: ['baidu_map'],
+        source: 'baidu_region_search',
+        tags: poi.tags || [],
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('区域美食搜索失败:', errorMessage);
+      return [];
+    }
+  }
+
+  /**
+   * 综合搜索美食（支持坐标搜索和区域搜索）
+   * @param location - 位置信息（坐标、地址或区域名称）
+   * @param radius - 搜索半径（米，仅用于坐标搜索）
+   * @param keyword - 搜索关键词
+   * @param cuisineType - 菜系类型
+   * @param platforms - 要使用的平台
+   * @param poiType - 高德地图POI类型（可选）
+   * @param cityLimit - 是否仅返回指定城市数据（可选）
+   * @returns Promise<Restaurant[]>
+   */
+  public async searchFood(
+    location: string,
+    radius: number = MapPoiService.DEFAULT_RADIUS,
+    keyword: string = MapPoiService.DEFAULT_KEYWORD,
+    cuisineType?: string,
+    platforms: string[] = MapPoiService.DEFAULT_PLATFORMS,
+    poiType?: string,
+    cityLimit: boolean = false
+  ): Promise<Restaurant[]> {
+    try {
+      // 判断是否为区域搜索
+      const isRegionSearch = LocationService.isRegionSearch(location);
+
+      if (isRegionSearch) {
+        // 使用区域搜索
+        const results: Restaurant[] = [];
+        
+        // 百度地图区域搜索
+        if (platforms.includes('baidu')) {
+          const baiduResults = await this.searchFoodInRegion(location, keyword, cuisineType);
+          results.push(...baiduResults);
+        }
+        
+        // 高德地图文本搜索
+        if (platforms.includes('amap') && this.amapApiKey) {
+          const amapResults = await this.searchFoodWithAmapText(
+            location, 
+            keyword, 
+            poiType || cuisineType, 
+            cityLimit
+          );
+          results.push(...amapResults);
+        }
+        
+        return this.deduplicateAndSort(results);
+      } else {
+        // 使用坐标搜索
+        const coordinates = await this.locationService.getCoordinates(location);
+        return await this.searchNearbyFood(coordinates, radius, keyword, platforms);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('美食搜索失败:', errorMessage);
+      return [];
+    }
   }
 }
 
