@@ -1,4 +1,4 @@
-# @foodnearby/mcp-server
+# foodnearby-mcp
 
 基于 Model Context Protocol (MCP) 的美食搜索服务，使用百度地图和高德地图API进行位置服务，帮助用户查找当前位置附近的美食餐厅。
 
@@ -26,7 +26,33 @@
 ### 环境要求
 - Node.js >= 18
 
-### 安装步骤
+### 方式1：作为MCP服务使用（推荐）
+
+1. **全局安装**
+```bash
+npm install -g foodnearby-mcp
+```
+
+2. **配置Cursor MCP服务**
+在 `~/.cursor/mcp.json` 文件中添加配置：
+```json
+{
+  "mcpServers": {
+    "foodnearby-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "foodnearby-mcp"
+      ],
+      "env": {
+        "BAIDU_MAP_API_KEY": "your_baidu_map_api_key",
+        "GAODE_MAP_API_KEY": "your_gaode_map_api_key"
+      }
+    }
+  }
+}
+```
+### 方式2：本地开发使用
 
 1. **克隆项目**
 ```bash
@@ -52,8 +78,6 @@ BAIDU_MAP_API_KEY=your_baidu_map_api_key
 # 高德地图API（备用位置服务）
 GAODE_MAP_API_KEY=your_gaode_map_api_key
 
-# 服务端口
-PORT=3000
 ```
 
 4. **编译TypeScript**
@@ -76,9 +100,21 @@ npm run dev
 npm run dev:run
 ```
 
-## 🛠️ API 工具
+## 🛠️ MCP工具使用
 
-### 1. 地图POI搜索
+### search_map_poi - 地图POI搜索
+
+**功能**: 通过地图API搜索附近的美食商家POI信息
+
+**参数**:
+- `location` (必需): 搜索位置，可以是地址、坐标或"当前位置"
+- `radius` (可选): 搜索半径（米），默认1000米
+- `keyword` (可选): 搜索关键词，如：美食、餐厅、火锅、川菜等，默认"美食"
+- `cuisine_type` (可选): 菜系类型筛选
+- `price_range` (可选): 价格区间筛选：便宜、中等、昂贵
+- `map_platforms` (可选): 地图平台：baidu、amap、all，默认"all"
+
+**使用示例**:
 ```javascript
 search_map_poi({
   location: "北京市朝阳区三里屯",

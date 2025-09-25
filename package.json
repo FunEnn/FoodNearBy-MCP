@@ -1,9 +1,13 @@
 {
-  "name": "@foodnearby/mcp-server",
-  "version": "1.0.0",
+  "name": "foodnearby-mcp",
+  "version": "1.0.1",
   "description": "MCP服务：查找当前位置附近的美食，使用百度地图和高德地图API进行位置服务",
   "main": "dist/index.js",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FunEnn/FoodNearBy-MCP.git"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
