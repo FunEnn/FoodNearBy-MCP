@@ -1,0 +1,9 @@
+node_modules/
+
+# 环境变量
+.env
+.env.local
+.env.development
+
+dist/
+build/
