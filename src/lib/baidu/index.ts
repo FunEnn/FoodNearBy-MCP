@@ -1,6 +1,6 @@
 // 百度地图服务封装导出
 
-export * from './types';
-export * from './constants';
-export * from './utils';
-export * from './api';
+export * from './types.js';
+export * from './constants.js';
+export * from './utils.js';
+export * from './api.js';

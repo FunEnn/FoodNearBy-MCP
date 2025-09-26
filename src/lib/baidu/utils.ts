@@ -1,5 +1,5 @@
-import { Coordinates } from './types';
-import { CUISINE_TYPES, REGION_KEYWORDS } from './constants';
+import { Coordinates } from './types.js';
+import { CUISINE_TYPES, REGION_KEYWORDS } from './constants.js';
 
 // 工具函数集合
 

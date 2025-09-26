@@ -40,7 +40,7 @@ class FoodNearbyMCPServer {
     this.server = new Server(
       {
         name: "foodnearby-mcp",
-        version: '0.0.4',
+        version: '0.0.6',
       },
       {
         capabilities: {

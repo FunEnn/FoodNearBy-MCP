@@ -12,7 +12,7 @@ import {
   parsePriceRange,
   extractCuisineType,
   isRegionSearch
-} from '../lib/baidu';
+} from '../lib/baidu/index.js';
 
 
 export class BaiduLocationService {
