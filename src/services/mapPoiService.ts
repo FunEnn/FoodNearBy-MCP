@@ -151,7 +151,7 @@ export class MapPoiService {
   }
 
   /**
-   * 通过百度地图API搜索附近的美食商家
+   * 通过百度地图API搜索附近的美食商家（使用圆形区域检索）
    * @param coordinates - 坐标
    * @param radius - 搜索半径（米）
    * @param keyword - 搜索关键词
@@ -163,25 +163,26 @@ export class MapPoiService {
     keyword: string = MapPoiService.DEFAULT_KEYWORD
   ): Promise<Restaurant[]> {
     try {
-      const url = 'https://api.map.baidu.com/place/v2/search';
-      const params = {
-        query: keyword,
-        location: `${coordinates.lat},${coordinates.lng}`,
-        radius: radius,
-        output: 'json',
-        ak: this.baiduApiKey,
-        scope: 2, // 返回详细信息
-        page_size: 20,
-        page_num: 0,
-      };
-
-      const response: AxiosResponse<BaiduPoiResponse> = await axios.get(url, { params });
+      // 使用百度地图圆形区域检索API
+      const searchResults = await this.baiduLocationService.searchFoodNearby(coordinates, keyword, radius);
       
-      if (response.data.status === 0 && response.data.results) {
-        return response.data.results.map(poi => this.formatBaiduPoi(poi));
-      } else {
-        throw new Error(`百度地图API错误: ${response.data.message}`);
-      }
+      return searchResults.map((poi, index) => ({
+        id: `baidu_circle_${index}`,
+        name: poi.name,
+        address: poi.address,
+        location: poi.location,
+        rating: poi.rating,
+        review_count: 0, // 圆形区域检索API可能不返回评论数
+        phone: poi.phone || '',
+        opening_hours: poi.opening_hours || '',
+        price_range: poi.price_range || '中等',
+        cuisine_type: poi.cuisine_type || '其他',
+        distance: poi.distance || 0,
+        image: '',
+        platforms: ['baidu_map'],
+        source: 'baidu_circle_search',
+        tags: poi.tags || [],
+      }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('百度地图POI搜索失败:', errorMessage);
@@ -551,11 +552,14 @@ export class MapPoiService {
     cityLimit: boolean = false
   ): Promise<Restaurant[]> {
     try {
-      // 判断是否为区域搜索
-      const isRegionSearch = BaiduLocationService.isRegionSearch(location);
+      console.error(`🔍 搜索参数：location=${location}, keyword=${keyword}, cuisineType=${cuisineType}`);
+      
+      // 智能判断搜索策略
+      const searchStrategy = this.determineSearchStrategy(location);
+      console.error(`📋 搜索策略：${searchStrategy}`);
 
-      if (isRegionSearch) {
-        // 使用区域搜索
+      if (searchStrategy === 'region') {
+        // 区域搜索：直接使用location作为region参数
         const results: Restaurant[] = [];
         
         // 百度地图区域搜索
@@ -576,9 +580,29 @@ export class MapPoiService {
         }
         
         return this.deduplicateAndSort(results);
-      } else {
-        // 使用坐标搜索
+      } else if (searchStrategy === 'coordinate') {
+        // 坐标搜索：先获取坐标，再进行圆形区域搜索
         const coordinates = await this.locationService.getCoordinates(location);
+        console.error(`📍 获取坐标：${coordinates.lat}, ${coordinates.lng}`);
+        return await this.searchNearbyFood(coordinates, radius, keyword, platforms);
+      } else {
+        // 混合搜索：先尝试区域搜索，如果失败则尝试坐标搜索
+        console.error(`🔄 尝试混合搜索策略`);
+        
+        try {
+          // 先尝试区域搜索
+          const regionResults = await this.searchFoodInRegion(location, keyword, cuisineType);
+          if (regionResults.length > 0) {
+            console.error(`✅ 区域搜索成功，找到 ${regionResults.length} 个结果`);
+            return regionResults;
+          }
+        } catch (error) {
+          console.error(`⚠️ 区域搜索失败，尝试坐标搜索:`, error);
+        }
+        
+        // 如果区域搜索失败，尝试坐标搜索
+        const coordinates = await this.locationService.getCoordinates(location);
+        console.error(`📍 获取坐标：${coordinates.lat}, ${coordinates.lng}`);
         return await this.searchNearbyFood(coordinates, radius, keyword, platforms);
       }
     } catch (error) {
@@ -586,6 +610,31 @@ export class MapPoiService {
       console.error('美食搜索失败:', errorMessage);
       return [];
     }
+  }
+
+  /**
+   * 智能判断搜索策略
+   * @param location - 位置信息
+   * @returns 搜索策略：'region' | 'coordinate' | 'mixed'
+   */
+  private determineSearchStrategy(location: string): 'region' | 'coordinate' | 'mixed' {
+    // 如果包含区域关键词，使用区域搜索
+    if (BaiduLocationService.isRegionSearch(location)) {
+      return 'region';
+    }
+    
+    // 如果是坐标格式，使用坐标搜索
+    if (this.locationService.isCoordinateFormat(location)) {
+      return 'coordinate';
+    }
+    
+    // 如果是"当前位置"，使用坐标搜索
+    if (location === '当前位置' || location === 'current location') {
+      return 'coordinate';
+    }
+    
+    // 其他情况使用混合搜索策略
+    return 'mixed';
   }
 }
 

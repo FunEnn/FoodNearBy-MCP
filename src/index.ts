@@ -149,8 +149,42 @@ class FoodNearbyMCPServer {
     } = args;
 
     try {
+      // 检查API密钥配置
+      const baiduApiKey = process.env.BAIDU_MAP_API_KEY;
+      const amapApiKey = process.env.AMAP_API_KEY;
+      
+      if (!baiduApiKey && !amapApiKey) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `未配置地图API密钥`,
+            },
+          ],
+        };
+      }
+
       // 确定要使用的地图平台
       const platforms = map_platforms.includes('all') ? ['baidu', 'amap'] : map_platforms;
+      
+      // 过滤掉没有API密钥的平台
+      const availablePlatforms = platforms.filter(platform => {
+        if (platform === 'baidu') return !!baiduApiKey;
+        if (platform === 'amap') return !!amapApiKey;
+        return false;
+      });
+
+      if (availablePlatforms.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `没有可用的地图平台`,
+            },
+          ],
+        };
+      }
+
       
       // 使用综合搜索功能（自动判断是区域搜索还是坐标搜索）
       const results = await this.mapPoiService.searchFood(
@@ -158,10 +192,11 @@ class FoodNearbyMCPServer {
         radius, 
         keyword, 
         cuisine_type,
-        platforms,
+        availablePlatforms,
         poi_type,
         city_limit
       );
+
 
       if (results.length === 0) {
         return {
@@ -197,26 +232,21 @@ class FoodNearbyMCPServer {
         content: [
           {
             type: 'text',
-            text: `美食搜索成功！找到 ${filteredCount} 家${filterApplied ? '符合条件' : ''}的美食商家
-
-${resultText}
-
----
-
-${this.formatSearchStats(location, radius, keyword, platforms, { 
-              cuisine_type: cuisine_type || undefined, 
-              price_range: price_range || undefined, 
-              poi_type: poi_type || undefined, 
-              city_limit: city_limit || undefined 
-            })}
-
-${filterApplied ? `\n筛选结果：从 ${totalResults} 个结果中筛选出 ${filteredCount} 个符合条件的结果` : ''}`,
+            text: `找到 ${filteredCount} 家美食商家\n\n${resultText}`,
           },
         ],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`地图POI搜索失败: ${errorMessage}\n\n请检查：\n• 地图API密钥是否正确配置\n• 网络连接是否正常\n• 搜索参数是否合理`);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `搜索失败: ${errorMessage}`,
+          },
+        ],
+      };
     }
   }
 
@@ -230,58 +260,18 @@ ${filterApplied ? `\n筛选结果：从 ${totalResults} 个结果中筛选出 ${
     const distanceText = restaurant.distance ? `${Math.round(restaurant.distance)}米` : '距离未知';
     const phoneText = restaurant.phone || '电话未知';
     const hoursText = restaurant.opening_hours || '营业时间未知';
-    const reviewText = restaurant.review_count > 0 ? `${restaurant.review_count}条评价` : '暂无评价';
 
-    return `**${index}. ${restaurant.name}**
+    return `${index}. ${restaurant.name}
 地址：${restaurant.address}
-评分：${restaurant.rating}/5.0 (${reviewText})
+评分：${restaurant.rating}/5.0
 电话：${phoneText}
 营业时间：${hoursText}
 价格：${restaurant.price_range}
 菜系：${restaurant.cuisine_type}
-距离：${distanceText}
-来源：${restaurant.platforms.join(', ')}`;
+距离：${distanceText}`;
   }
 
 
-  /**
-   * 格式化搜索统计信息
-   * @param location - 搜索位置
-   * @param radius - 搜索半径
-   * @param keyword - 搜索关键词
-   * @param platforms - 使用平台
-   * @param filters - 筛选条件
-   * @returns 格式化后的字符串
-   */
-  private formatSearchStats(
-    location: string, 
-    radius: number, 
-    keyword: string, 
-    platforms: string[], 
-    filters: { cuisine_type?: string | undefined; price_range?: string | undefined; poi_type?: string | undefined; city_limit?: boolean | undefined }
-  ): string {
-    const filterText = [
-      filters.cuisine_type && `菜系=${filters.cuisine_type}`,
-      filters.price_range && `价格=${filters.price_range}`,
-      filters.poi_type && `POI类型=${filters.poi_type}`,
-      filters.city_limit && `城市限制=${filters.city_limit}`
-    ].filter(Boolean).join(' | ');
-
-    const platformNames = platforms.map(p => {
-      switch (p) {
-        case 'baidu': return '百度地图';
-        case 'amap': return '高德地图';
-        default: return p;
-      }
-    }).join(' + ');
-
-    return `**搜索统计**
-搜索位置：${location}
-搜索半径：${radius}米
-搜索关键词：${keyword}
-使用平台：${platformNames}
-${filterText ? `筛选条件：${filterText}` : ''}`;
-  }
 
   public async run(): Promise<void> {
     const transport = new StdioServerTransport();
