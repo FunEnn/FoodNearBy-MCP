@@ -12,7 +12,6 @@ import dotenv from 'dotenv';
 import { LocationService } from './services/locationService.js';
 import { MapPoiService } from './services/mapPoiService.js';
 
-// 加载环境变量
 dotenv.config();
 
 interface SearchMapPoiArgs {
@@ -26,10 +25,9 @@ interface SearchMapPoiArgs {
   city_limit?: boolean;
 }
 
-// 常量定义
 const DEFAULT_RADIUS = 1000;
 const DEFAULT_KEYWORD = '美食';
-const DEFAULT_PLATFORMS = ['all'];
+const DEFAULT_PLATFORMS = ['amap'];
 
 class FoodNearbyMCPServer {
   private server: Server;
@@ -40,7 +38,7 @@ class FoodNearbyMCPServer {
     this.server = new Server(
       {
         name: "foodnearby-mcp",
-        version: '0.0.6',
+        version: '0.0.7',
       },
       {
         capabilities: {
@@ -56,19 +54,18 @@ class FoodNearbyMCPServer {
   }
 
   private setupToolHandlers(): void {
-    // 列出可用工具
     this.server.setRequestHandler(ListToolsRequestSchema, async (): Promise<ListToolsResult> => {
       return {
         tools: [
           {
             name: 'search_map_poi',
-            description: '通过地图API搜索附近的餐饮商家POI信息，专注于美食餐厅。支持百度地图和高德地图，提供详细的餐厅信息包括评分、价格、菜系等。',
+            description: '通过高德地图API搜索附近的餐饮商家POI信息，专注于美食餐厅。提供详细的餐厅信息包括评分、价格、菜系等。',
             inputSchema: {
               type: 'object',
               properties: {
                 location: {
                   type: 'string',
-                  description: '搜索位置，可以是地址、坐标、"当前位置"或区域名称（如：北京市、天安门广场、39.9042,116.4074）',
+                  description: '搜索位置，可以是地址、坐标、"当前位置"或区域名称（如：北京市、天安门广场、39.9042,116.4074）。使用"当前位置"将自动获取用户当前位置并搜索周边美食。',
                 },
                 radius: {
                   type: 'number',
@@ -91,8 +88,8 @@ class FoodNearbyMCPServer {
                 map_platforms: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: '地图平台选择：baidu（百度地图）、amap（高德地图）、all（全部平台）',
-                  default: DEFAULT_PLATFORMS,
+                  description: '地图平台选择：amap（高德地图）',
+                  default: ['amap'],
                 },
                 poi_type: {
                   type: 'string',
@@ -111,7 +108,6 @@ class FoodNearbyMCPServer {
       };
     });
 
-    // 处理工具调用
     this.server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
       const { name, arguments: args } = request.params;
 
@@ -149,50 +145,27 @@ class FoodNearbyMCPServer {
     } = args;
 
     try {
-      // 检查API密钥配置
-      const baiduApiKey = process.env.BAIDU_MAP_API_KEY;
       const amapApiKey = process.env.AMAP_API_KEY;
       
-      if (!baiduApiKey && !amapApiKey) {
+      if (!amapApiKey) {
         return {
           content: [
             {
               type: 'text',
-              text: `未配置地图API密钥`,
+              text: `未配置高德地图API密钥`,
             },
           ],
         };
       }
 
-      // 确定要使用的地图平台
-      const platforms = map_platforms.includes('all') ? ['baidu', 'amap'] : map_platforms;
-      
-      // 过滤掉没有API密钥的平台
-      const availablePlatforms = platforms.filter(platform => {
-        if (platform === 'baidu') return !!baiduApiKey;
-        if (platform === 'amap') return !!amapApiKey;
-        return false;
-      });
+      const platforms = ['amap'];
 
-      if (availablePlatforms.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `没有可用的地图平台`,
-            },
-          ],
-        };
-      }
-
-      
-      // 使用综合搜索功能（自动判断是区域搜索还是坐标搜索）
       const results = await this.mapPoiService.searchFood(
         location, 
         radius, 
         keyword, 
         cuisine_type,
-        availablePlatforms,
+        platforms,
         poi_type,
         city_limit
       );
@@ -209,7 +182,6 @@ class FoodNearbyMCPServer {
         };
       }
 
-      // 应用筛选条件
       let filteredResults = results;
       
       if (cuisine_type) {
@@ -250,12 +222,6 @@ class FoodNearbyMCPServer {
     }
   }
 
-  /**
-   * 格式化餐厅信息
-   * @param restaurant - 餐厅信息
-   * @param index - 序号
-   * @returns 格式化后的字符串
-   */
   private formatRestaurantInfo(restaurant: any, index: number): string {
     const distanceText = restaurant.distance ? `${Math.round(restaurant.distance)}米` : '距离未知';
     const phoneText = restaurant.phone || '电话未知';
@@ -280,6 +246,5 @@ class FoodNearbyMCPServer {
   }
 }
 
-// 启动服务器
 const server = new FoodNearbyMCPServer();
 server.run().catch(console.error);
